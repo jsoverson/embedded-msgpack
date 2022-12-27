@@ -1,6 +1,6 @@
 fn test_decode<'a, T: serde::de::Deserialize<'a> + PartialEq + std::fmt::Debug>(expected: T, variants: &'a [&'a [u8]]) {
     for &x in variants.iter() {
-        let v: T = embedded_msgpack::decode::from_slice(x).unwrap();
+        let v: T = wasm_msgpack::decode::from_slice(x).unwrap();
         assert_eq!(expected, v);
     }
 }
@@ -29,7 +29,7 @@ fn decode_uint() {
 #[test]
 fn decode_bin() {
     test_decode(
-        embedded_msgpack::Bytes::new(&[
+        wasm_msgpack::Bytes::new(&[
             0x31u8, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x31,
             0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x31,
         ]),
@@ -61,7 +61,7 @@ fn decode_bin() {
 #[test]
 fn decode_bin32() {
     test_decode(
-        embedded_msgpack::Bytes::new(&[
+        wasm_msgpack::Bytes::new(&[
             0x31u8, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x31,
             0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x31,
         ]),
@@ -120,7 +120,7 @@ fn decode_enum() {
     }
     test_decode(Test2::Variant1, &[&[0x01]]);
 
-    // let v: Option<Test> = embedded_msgpack::decode::from_slice(&[
+    // let v: Option<Test> = wasm_msgpack::decode::from_slice(&[
     //     0xA8, 0x56, 0x61, 0x72, 0x69, 0x61, 0x6E, 0x74, 0x33,
     // ])
     // .unwrap();

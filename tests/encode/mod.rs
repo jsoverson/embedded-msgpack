@@ -1,4 +1,4 @@
-use embedded_msgpack::encode::{Binary, SerializeIntoSlice};
+use wasm_msgpack::encode::{Binary, SerializeIntoSlice};
 
 fn print_slice(data: &[u8]) {
     print!("[");
@@ -18,20 +18,24 @@ fn test_encode_direct<T: SerializeIntoSlice>(data: &T, expected: &[u8]) {
 #[cfg(feature = "serde")]
 fn test_encode_serde<T: serde::Serialize>(data: &T, expected: &[u8]) {
     let mut buf = [0u8; 1000];
-    let len = embedded_msgpack::encode::serde::to_array(data, &mut buf).unwrap();
+    let len = wasm_msgpack::encode::serde::to_array(data, &mut buf).unwrap();
     print_slice(&buf[..len]);
     assert_eq!(expected.len(), len);
     assert_eq!(expected, &buf[..len]);
 }
 #[cfg(feature = "serde")]
 fn test_encode<T>(data: T, expected: &[u8])
-where T: SerializeIntoSlice + serde::Serialize {
+where
+    T: SerializeIntoSlice + serde::Serialize,
+{
     test_encode_direct(&data, expected);
     test_encode_serde(&data, expected);
 }
 #[cfg(not(feature = "serde"))]
 fn test_encode<T>(data: T, expected: &[u8])
-where T: SerializeIntoSlice {
+where
+    T: SerializeIntoSlice,
+{
     test_encode_direct(&data, expected);
 }
 
@@ -48,7 +52,7 @@ fn encode_bool() {
 #[cfg(feature = "timestamp")]
 #[test]
 fn encode_timestamp() {
-    use embedded_msgpack::timestamp::Timestamp;
+    use wasm_msgpack::timestamp::Timestamp;
     test_encode_direct(&Timestamp::new(1514862245, 0).unwrap(), &[0xd6, 0xff, 0x5a, 0x4a, 0xf6, 0xa5]);
     test_encode_direct(
         &Timestamp::new(1514862245, 678901234).unwrap(),

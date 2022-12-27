@@ -1,5 +1,5 @@
 #[allow(unused_imports)]
-use embedded_msgpack::encode::Binary;
+use wasm_msgpack::encode::Binary;
 
 fn print_slice(data: &[u8]) {
     print!("[");
@@ -11,18 +11,18 @@ fn print_slice(data: &[u8]) {
 
 fn test_roundtrip<T: serde::Serialize + serde::de::DeserializeOwned + PartialEq + core::fmt::Debug>(data: T) {
     let mut buf = [0u8; 1000];
-    let len = embedded_msgpack::encode::serde::to_array(&data, &mut buf).unwrap();
+    let len = wasm_msgpack::encode::serde::to_array(&data, &mut buf).unwrap();
     print_slice(&buf[..len]);
-    let v = embedded_msgpack::decode::from_slice(&buf).unwrap();
+    let v = wasm_msgpack::decode::from_slice(&buf).unwrap();
     assert_eq!(data, v);
 }
 fn test_roundtrip_borrowed<'a, T: 'a + serde::Serialize + serde::de::Deserialize<'a> + PartialEq + core::fmt::Debug>(
     data: T,
     buf: &'a mut [u8],
 ) {
-    let len = embedded_msgpack::encode::serde::to_array(&data, buf).unwrap();
+    let len = wasm_msgpack::encode::serde::to_array(&data, buf).unwrap();
     print_slice(&buf[..len]);
-    let v = embedded_msgpack::decode::from_slice(&buf[..len]).unwrap();
+    let v = wasm_msgpack::decode::from_slice(&buf[..len]).unwrap();
     assert_eq!(data, v);
 }
 
@@ -39,7 +39,7 @@ fn roundtrip_bool() {
 #[cfg(feature = "timestamp")]
 #[test]
 fn roundtrip_timestamp() {
-    use embedded_msgpack::timestamp::Timestamp;
+    use wasm_msgpack::timestamp::Timestamp;
     test_roundtrip(Timestamp::new(1514862245, 0).unwrap());
     test_roundtrip(Timestamp::new(1514862245, 678901234).unwrap());
     test_roundtrip(Timestamp::new(2147483647, 999999999).unwrap());

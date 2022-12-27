@@ -1,15 +1,15 @@
 [package]
-name = "embedded-msgpack"
-description = "MessagePack serialization implementation for Rust optimized for embedded/no_std environments"
+name = "wasm-msgpack"
+description = "MessagePack serialization implementation for Rust optimized for WebAssembly environments"
 version = "0.2.2"
-repository = "https://github.com/Sympatron/embedded-msgpack"
-documentation = "https://docs.rs/embedded-msgpack"
+repository = "https://github.com/jsoverson/wasm-msgpack"
+documentation = "https://docs.rs/wasm-msgpack"
 readme = "./README.md"
 license = "MIT OR Apache-2.0"
-authors = ["Karsten Große"]
-keywords = ["no_std", "msgpack", "messagepack", "serde"]
-categories = ["no-std", "embedded"]
-edition = "2018"
+authors = ["Karsten Große", "Jarrod Overson"]
+keywords = ["no_std", "msgpack", "messagepack", "serde", "WebAssembly"]
+categories = ["no-std", "embedded", "wasm"]
+edition = "2021"
 
 [package.metadata.docs.rs]
 features = ["compliant"]
@@ -17,7 +17,7 @@ features = ["compliant"]
 [dependencies]
 num-traits = { version = "0.2", default-features = false }
 byteorder = { version = "1", default-features = false }
-zerocopy = { version = "0.5", default-features = false }
+zerocopy = { version = "0.6", default-features = false }
 serde = { version = "1.0", default-features = false, optional = true, features = [
     "derive"
 ] }
