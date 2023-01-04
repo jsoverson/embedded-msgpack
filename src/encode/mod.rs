@@ -30,9 +30,6 @@ impl ::core::fmt::Display for Error {
     }
 }
 
-#[cfg(feature = "std")]
-impl ::std::error::Error for Error {}
-
 pub trait SerializeIntoSlice {
     fn write_into_slice(&self, buf: &mut [u8]) -> Result<usize, Error>;
 }

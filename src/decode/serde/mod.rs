@@ -60,30 +60,21 @@ impl<'a> Deserializer<'a> {
     fn peek(&mut self) -> Option<Marker> { Some(Marker::from_u8(*self.slice.get(self.index)?)) }
 }
 
-// NOTE(deserialize_*signed) we avoid parsing into u64 and then casting to a smaller integer, which
-// is what upstream does, to avoid pulling in 64-bit compiler intrinsics, which waste a few KBs of
-// Flash, when targeting non 64-bit architectures
-macro_rules! deserialize_primitive {
-    ($ty:ident) => {
-        paste! {
-            fn [<deserialize_ $ty>]<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value>
-        {
-            print_debug::<V>("Deserializer::deserialize_", stringify!($ty), &self);
-            let (value, len) = paste! { super::[<read_ $ty>](&self.slice[self.index..])? };
-            self.index += len;
-            print_debug_value::<$ty, $ty>(stringify!(concat_idents!(Deserializer::deserialize_, $ty)), &self, &value);
-            paste! { visitor.[<visit_ $ty>](value) }
-        }}
-    };
-}
 macro_rules! deserialize_primitives {
-    ($($ty:ident),*) => { $( deserialize_primitive!($ty); )* };
+    ($into:ident, $($ty:ident),*) => {
+      $(paste! {
+        fn [<deserialize_ $ty>]<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value>
+        { paste! { self.[<deserialize_ $into>](visitor) } }
+       })*
+    };
 }
 
 impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     type Error = Error;
 
-    deserialize_primitives!(bool, u8, u16, u32, u64, i8, i16, i32, i64, f32, f64);
+    deserialize_primitives!(i64, i8, i16, i32);
+    deserialize_primitives!(u64, u8, u16, u32);
+    deserialize_primitives!(f64, f32);
 
     fn deserialize_str<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
         print_debug::<V>("Deserializer::deserialize_", "str", &self);
@@ -203,6 +194,42 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         print_debug::<V>("Deserializer::deserialize_", "string", &self);
         self.deserialize_str(visitor)
     }
+
+    fn deserialize_i64<V>(self, visitor: V) -> core::result::Result<V::Value, Self::Error>
+    where V: Visitor<'de> {
+        print_debug::<V>("Deserializer::deserialize_", "i64", &self);
+        let (value, len) = super::read_i64(&self.slice[self.index..])?;
+        self.index += len;
+        print_debug_value::<i64, i64>("Deserializer::deserialize_i64", &self, &value);
+        visitor.visit_i64(value)
+    }
+
+    fn deserialize_u64<V>(self, visitor: V) -> core::result::Result<V::Value, Self::Error>
+    where V: Visitor<'de> {
+        print_debug::<V>("Deserializer::deserialize_", "u64", &self);
+        let (value, len) = super::read_u64(&self.slice[self.index..])?;
+        self.index += len;
+        print_debug_value::<u64, u64>("Deserializer::deserialize_u64", &self, &value);
+        visitor.visit_u64(value)
+    }
+
+    fn deserialize_f64<V>(self, visitor: V) -> core::result::Result<V::Value, Self::Error>
+    where V: Visitor<'de> {
+        print_debug::<V>("Deserializer::deserialize_", "f64", &self);
+        let (value, len) = super::read_f64(&self.slice[self.index..])?;
+        self.index += len;
+        print_debug_value::<f64, f64>("Deserializer::deserialize_f64", &self, &value);
+        visitor.visit_f64(value)
+    }
+
+    fn deserialize_bool<V>(self, visitor: V) -> core::result::Result<V::Value, Self::Error>
+    where V: Visitor<'de> {
+        print_debug::<V>("Deserializer::deserialize_", "bool", &self);
+        let (value, len) = super::read_bool(&self.slice[self.index..])?;
+        self.index += len;
+        print_debug_value::<bool, bool>("Deserializer::deserialize_bool", &self, &value);
+        visitor.visit_bool(value)
+    }
 }
 
 impl ::serde::de::StdError for Error {}
@@ -234,7 +261,7 @@ impl fmt::Display for Error {
             match self {
                 Error::InvalidType => "Unexpected type encountered.",
                 Error::OutOfBounds => "Index out of bounds.",
-                Error::EndOfBuffer => "EOF while parsing.",
+                Error::EndOfBuffer => "End of buffer reached.",
                 Error::CustomError => "Did not match deserializer's expected format.",
                 #[cfg(feature = "custom-error-messages")]
                 Error::CustomErrorWithMessage(msg) => msg.as_str(),

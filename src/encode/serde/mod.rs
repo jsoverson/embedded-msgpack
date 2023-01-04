@@ -164,6 +164,8 @@ where T: ser::Serialize + ?Sized {
     Ok(ser.pos)
 }
 
+impl ser::StdError for Error {}
+
 impl ser::Error for Error {
     fn custom<T>(_msg: T) -> Self
     where T: core::fmt::Display {
