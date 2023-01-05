@@ -11,7 +11,7 @@ use zerocopy::ByteSlice;
 #[derive(Debug)]
 pub enum Error {
     /// End of buffer was reached, before object was deserialized.
-    EndOfBuffer,
+    EndOfBuffer(Marker),
     /// Value was out of bounds. This can happen if for example a `u32` value is deserialized into `u16`.
     ///
     /// # Examples
@@ -30,6 +30,7 @@ pub enum Error {
     InvalidArrayType,
     InvalidMapType,
     InvalidNewTypeLength,
+    InvalidUtf8(core::str::Utf8Error),
 }
 
 #[cfg(feature = "serde")]
@@ -102,18 +103,20 @@ impl DeserializeFromSlice for Option<i64> {
     }
 }
 
-pub fn read_raw_u8(buf: &[u8]) -> Result<(u8, &[u8]), Error> { buf.split_first().map(|(&x, rest)| (x, rest)).ok_or(Error::EndOfBuffer) }
+pub fn read_raw_u8(buf: &[u8]) -> Result<(u8, &[u8]), Error> {
+    buf.split_first().map(|(&x, rest)| (x, rest)).ok_or(Error::EndOfBuffer(Marker::U8))
+}
 pub fn read_raw_u16<B: ByteSlice>(buf: B) -> Result<(u16, B), Error> {
     // pub fn read_raw_u16(buf: &[u8]) -> Result<(u16, &[u8]), Error> {
     if buf.len() < 2 {
-        return Err(Error::EndOfBuffer);
+        return Err(Error::EndOfBuffer(Marker::U16));
     }
     let (v, rest) = buf.split_at(2);
     Ok((BigEndian::read_u16(&*v), rest))
 }
 pub fn read_raw_u32(buf: &[u8]) -> Result<(u32, &[u8]), Error> {
     if buf.len() < 4 {
-        return Err(Error::EndOfBuffer);
+        return Err(Error::EndOfBuffer(Marker::U32));
     }
     let (v, rest) = buf.split_at(4);
     Ok((BigEndian::read_u32(v), rest))
@@ -121,7 +124,7 @@ pub fn read_raw_u32(buf: &[u8]) -> Result<(u32, &[u8]), Error> {
 #[cfg(feature = "u64")]
 pub fn read_raw_u64(buf: &[u8]) -> Result<(u64, &[u8]), Error> {
     if buf.len() < 8 {
-        return Err(Error::EndOfBuffer);
+        return Err(Error::EndOfBuffer(Marker::U64));
     }
     let (v, rest) = buf.split_at(8);
     Ok((BigEndian::read_u64(v), rest))
@@ -173,22 +176,34 @@ pub fn read_sint<B: ByteSlice, T: FromPrimitive>(buf: B) -> Result<(T, usize), E
 }
 
 #[inline(always)]
-pub fn read_u8<B: ByteSlice>(buf: B) -> Result<(u8, usize), Error> { read_int(buf) }
+pub fn read_u8<B: ByteSlice>(buf: B) -> Result<(u8, usize), Error> {
+    read_int(buf)
+}
 #[inline(always)]
-pub fn read_u16<B: ByteSlice>(buf: B) -> Result<(u16, usize), Error> { read_int(buf) }
+pub fn read_u16<B: ByteSlice>(buf: B) -> Result<(u16, usize), Error> {
+    read_int(buf)
+}
 #[inline(always)]
-pub fn read_u32<B: ByteSlice>(buf: B) -> Result<(u32, usize), Error> { read_int(buf) }
+pub fn read_u32<B: ByteSlice>(buf: B) -> Result<(u32, usize), Error> {
+    read_int(buf)
+}
 
 #[inline(always)]
-pub fn read_i8<B: ByteSlice>(buf: B) -> Result<(i8, usize), Error> { read_sint(buf) }
+pub fn read_i8<B: ByteSlice>(buf: B) -> Result<(i8, usize), Error> {
+    read_sint(buf)
+}
 #[inline(always)]
-pub fn read_i16<B: ByteSlice>(buf: B) -> Result<(i16, usize), Error> { read_sint(buf) }
+pub fn read_i16<B: ByteSlice>(buf: B) -> Result<(i16, usize), Error> {
+    read_sint(buf)
+}
 #[inline(always)]
-pub fn read_i32<B: ByteSlice>(buf: B) -> Result<(i32, usize), Error> { read_sint(buf) }
+pub fn read_i32<B: ByteSlice>(buf: B) -> Result<(i32, usize), Error> {
+    read_sint(buf)
+}
 
 pub fn read_bool<B: ByteSlice>(buf: B) -> Result<(bool, usize), Error> {
     if buf.len() == 0 {
-        return Err(Error::EndOfBuffer);
+        return Err(Error::EndOfBuffer(Marker::True));
     }
 
     match Marker::from(buf[0]) {
@@ -200,7 +215,7 @@ pub fn read_bool<B: ByteSlice>(buf: B) -> Result<(bool, usize), Error> {
 
 pub fn read_u64<B: ByteSlice>(buf: B) -> Result<(u64, usize), Error> {
     if buf.len() == 0 {
-        return Err(Error::EndOfBuffer);
+        return Err(Error::EndOfBuffer(Marker::U64));
     }
 
     let marker = Marker::from(buf[0]);
@@ -210,7 +225,7 @@ pub fn read_u64<B: ByteSlice>(buf: B) -> Result<(u64, usize), Error> {
             if buf.len() >= 9 {
                 Ok((BigEndian::read_u64(&buf[1..9]) as u64, 9))
             } else {
-                Err(Error::EndOfBuffer)
+                Err(Error::EndOfBuffer(Marker::U64))
             }
         }
         _ => match read_i64(buf) {
@@ -222,7 +237,7 @@ pub fn read_u64<B: ByteSlice>(buf: B) -> Result<(u64, usize), Error> {
 
 pub fn read_i64<B: ByteSlice>(buf: B) -> Result<(i64, usize), Error> {
     if buf.len() == 0 {
-        return Err(Error::EndOfBuffer);
+        return Err(Error::EndOfBuffer(Marker::I64));
     }
 
     let marker = Marker::from(buf[0]);
@@ -234,21 +249,21 @@ pub fn read_i64<B: ByteSlice>(buf: B) -> Result<(i64, usize), Error> {
             if buf.len() >= 2 {
                 Ok((i64::from(buf[1]), 2))
             } else {
-                Err(Error::EndOfBuffer)
+                Err(Error::EndOfBuffer(Marker::I64))
             }
         }
         Marker::U16 => {
             if buf.len() >= 3 {
                 Ok((i64::from(BigEndian::read_u16(&buf[1..3])), 3))
             } else {
-                Err(Error::EndOfBuffer)
+                Err(Error::EndOfBuffer(Marker::I64))
             }
         }
         Marker::U32 => {
             if buf.len() >= 5 {
                 Ok((i64::from(BigEndian::read_u32(&buf[1..5])), 5))
             } else {
-                Err(Error::EndOfBuffer)
+                Err(Error::EndOfBuffer(Marker::I64))
             }
         }
         Marker::U64 => {
@@ -256,7 +271,7 @@ pub fn read_i64<B: ByteSlice>(buf: B) -> Result<(i64, usize), Error> {
                 let u = BigEndian::read_u64(&buf[1..9]);
                 i64::from_u64(u).map_or(Err(Error::OutOfBounds), |i| Ok((i, 9)))
             } else {
-                Err(Error::EndOfBuffer)
+                Err(Error::EndOfBuffer(Marker::I64))
             }
         }
         #[allow(clippy::cast_possible_wrap)]
@@ -264,37 +279,37 @@ pub fn read_i64<B: ByteSlice>(buf: B) -> Result<(i64, usize), Error> {
             if buf.len() >= 2 {
                 Ok((i64::from(buf[1] as i8), 2))
             } else {
-                Err(Error::EndOfBuffer)
+                Err(Error::EndOfBuffer(Marker::I64))
             }
         }
         Marker::I16 => {
             if buf.len() >= 3 {
                 Ok((i64::from(BigEndian::read_i16(&buf[1..3])), 3))
             } else {
-                Err(Error::EndOfBuffer)
+                Err(Error::EndOfBuffer(Marker::I64))
             }
         }
         Marker::I32 => {
             if buf.len() >= 5 {
                 Ok((i64::from(BigEndian::read_i32(&buf[1..5])), 5))
             } else {
-                Err(Error::EndOfBuffer)
+                Err(Error::EndOfBuffer(Marker::I64))
             }
         }
         Marker::I64 => {
             if buf.len() >= 9 {
                 Ok((BigEndian::read_i64(&buf[1..9]), 9))
             } else {
-                Err(Error::EndOfBuffer)
+                Err(Error::EndOfBuffer(Marker::I64))
             }
         }
-        _ => Err(Error::EndOfBuffer),
+        _ => Err(Error::EndOfBuffer(Marker::I64)),
     }
 }
 
 pub fn read_f32<B: ByteSlice>(buf: B) -> Result<(f32, usize), Error> {
     if buf.len() == 0 {
-        return Err(Error::EndOfBuffer);
+        return Err(Error::EndOfBuffer(Marker::F32));
     }
 
     let marker = Marker::from(buf[0]);
@@ -303,41 +318,43 @@ pub fn read_f32<B: ByteSlice>(buf: B) -> Result<(f32, usize), Error> {
             if buf.len() >= 5 {
                 Ok((BigEndian::read_f32(&buf[1..5]), 5))
             } else {
-                Err(Error::EndOfBuffer)
+                Err(Error::EndOfBuffer(Marker::F32))
             }
         }
-        _ => Err(Error::EndOfBuffer),
+        _ => Err(Error::EndOfBuffer(Marker::F32)),
     }
 }
 pub fn read_f64<B: ByteSlice>(buf: B) -> Result<(f64, usize), Error> {
     if buf.len() == 0 {
-        return Err(Error::EndOfBuffer);
+        return Err(Error::EndOfBuffer(Marker::F64));
     }
 
     let marker = Marker::from(buf[0]);
+
     match marker {
         Marker::F32 => {
             if buf.len() >= 5 {
                 let v = BigEndian::read_f32(&buf[1..5]);
                 Ok((f64::from(v), 5))
             } else {
-                Err(Error::EndOfBuffer)
+                Err(Error::EndOfBuffer(Marker::F32))
             }
         }
         Marker::F64 => {
             if buf.len() >= 9 {
                 Ok((BigEndian::read_f64(&buf[1..9]), 9))
             } else {
-                Err(Error::EndOfBuffer)
+                Err(Error::EndOfBuffer(Marker::F64))
             }
         }
-        _ => Err(Error::EndOfBuffer),
+        Marker::FixPos(v) => Ok((f64::from(v), 1)),
+        _ => Err(Error::EndOfBuffer(Marker::F64)),
     }
 }
 
 pub fn read_bin<B: ByteSlice>(buf: B) -> Result<(B, usize), Error> {
     if buf.len() == 0 {
-        return Err(Error::EndOfBuffer);
+        return Err(Error::EndOfBuffer(Marker::Bin16));
     }
 
     let marker = Marker::from(buf[0]);
@@ -350,7 +367,7 @@ pub fn read_bin<B: ByteSlice>(buf: B) -> Result<(B, usize), Error> {
                 let (bin, _rest) = rest.split_at(len);
                 Ok((bin, header_len + len))
             } else {
-                Err(Error::EndOfBuffer)
+                Err(Error::EndOfBuffer(Marker::FixStr(len as u8)))
             }
         }
         Marker::Bin8 | Marker::Str8 => {
@@ -362,16 +379,16 @@ pub fn read_bin<B: ByteSlice>(buf: B) -> Result<(B, usize), Error> {
                     let (bin, _rest) = rest.split_at(len);
                     Ok((bin, header_len + len))
                 } else {
-                    Err(Error::EndOfBuffer)
+                    Err(Error::EndOfBuffer(Marker::Bin8))
                 }
             } else {
-                Err(Error::EndOfBuffer)
+                Err(Error::EndOfBuffer(Marker::Bin8))
             }
         }
         Marker::Bin16 | Marker::Str16 => {
             let header_len = 3;
             if buf.len() < header_len {
-                return Err(Error::EndOfBuffer);
+                return Err(Error::EndOfBuffer(Marker::Bin16));
             }
             let (_, buf) = buf.split_at(1);
             let (len, buf) = read_raw_u16(buf)?; //BigEndian::read_u16(&buf[1..header_len]) as usize;
@@ -380,14 +397,14 @@ pub fn read_bin<B: ByteSlice>(buf: B) -> Result<(B, usize), Error> {
                 let (bin, _rest) = buf.split_at(len);
                 Ok((bin, header_len + len))
             } else {
-                Err(Error::EndOfBuffer)
+                Err(Error::EndOfBuffer(Marker::Bin16))
             }
         }
         #[cfg(feature = "bin32")]
         Marker::Bin32 | Marker::Str32 => {
             let header_len = 5;
             if buf.len() < header_len {
-                return Err(Error::EndOfBuffer);
+                return Err(Error::EndOfBuffer(Marker::Bin32));
             }
             let len = BigEndian::read_u32(&buf[1..header_len]) as usize;
             if buf.len() >= header_len + len {
@@ -395,7 +412,7 @@ pub fn read_bin<B: ByteSlice>(buf: B) -> Result<(B, usize), Error> {
                 let (bin, _rest) = rest.split_at(len);
                 Ok((bin, header_len + len))
             } else {
-                Err(Error::EndOfBuffer)
+                Err(Error::EndOfBuffer(Marker::Bin32))
             }
         }
         _ => Err(Error::InvalidBinType),
@@ -404,7 +421,7 @@ pub fn read_bin<B: ByteSlice>(buf: B) -> Result<(B, usize), Error> {
 
 pub fn read_str(buf: &[u8]) -> Result<(&str, usize), Error> {
     if buf.is_empty() {
-        return Err(Error::EndOfBuffer);
+        return Err(Error::EndOfBuffer(Marker::Str32));
     }
 
     let marker = Marker::from(buf[0]);
@@ -415,7 +432,7 @@ pub fn read_str(buf: &[u8]) -> Result<(&str, usize), Error> {
             if buf.len() >= header_len + len {
                 (header_len, len)
             } else {
-                return Err(Error::EndOfBuffer);
+                return Err(Error::EndOfBuffer(Marker::FixStr(len as u8)));
             }
         }
         Marker::Str8 => {
@@ -425,52 +442,48 @@ pub fn read_str(buf: &[u8]) -> Result<(&str, usize), Error> {
                 if buf.len() >= header_len + len {
                     (header_len, len)
                 } else {
-                    return Err(Error::EndOfBuffer);
+                    return Err(Error::EndOfBuffer(Marker::Str8));
                 }
             } else {
-                return Err(Error::EndOfBuffer);
+                return Err(Error::EndOfBuffer(Marker::Str8));
             }
         }
         Marker::Str16 => {
             let header_len = 3;
             if buf.len() < header_len {
-                return Err(Error::EndOfBuffer);
+                return Err(Error::EndOfBuffer(Marker::Str16));
             }
             let len = BigEndian::read_u16(&buf[1..header_len]) as usize;
             if buf.len() >= header_len + len {
                 (header_len, len)
             } else {
-                return Err(Error::EndOfBuffer);
+                return Err(Error::EndOfBuffer(Marker::Str16));
             }
         }
         #[cfg(feature = "str32")]
         Marker::Str32 => {
             let header_len = 5;
             if buf.len() < header_len {
-                return Err(Error::EndOfBuffer);
+                return Err(Error::EndOfBuffer(Marker::Str32));
             }
             let len = BigEndian::read_u32(&buf[1..header_len]) as usize;
             if buf.len() >= header_len + len {
                 (header_len, len)
             } else {
-                return Err(Error::EndOfBuffer);
+                return Err(Error::EndOfBuffer(Marker::Str32));
             }
         }
         _ => return Err(Error::InvalidStringType),
     };
     let buf = &buf[header_len..header_len + len];
-    let s = if buf.is_ascii() {
-        // This is safe because all ASCII characters are valid UTF-8 characters
-        unsafe { core::str::from_utf8_unchecked(buf) }
-    } else {
-        return Err(Error::NotAscii);
-    };
+    let s = core::str::from_utf8(buf).map_err(|e| Error::InvalidUtf8(e))?;
+
     Ok((s, header_len + len))
 }
 
 pub fn read_array_len<B: ByteSlice>(buf: B) -> Result<(usize, usize), Error> {
     if buf.len() == 0 {
-        return Err(Error::EndOfBuffer);
+        return Err(Error::EndOfBuffer(Marker::Array32));
     }
 
     // let (&marker, buf) = buf.split_first().ok_or(Error::EndOfBuffer)?;
@@ -482,33 +495,33 @@ pub fn read_array_len<B: ByteSlice>(buf: B) -> Result<(usize, usize), Error> {
             if buf.len() >= header_len + len {
                 (header_len, len)
             } else {
-                return Err(Error::EndOfBuffer);
+                return Err(Error::EndOfBuffer(Marker::FixArray(len as u8)));
             }
         }
         #[cfg(feature = "array16")]
         Marker::Array16 => {
             let header_len = 3;
             if buf.len() < header_len {
-                return Err(Error::EndOfBuffer);
+                return Err(Error::EndOfBuffer(Marker::Array16));
             }
             let len = BigEndian::read_u16(&buf[1..header_len]) as usize;
             if buf.len() >= header_len + len {
                 (header_len, len)
             } else {
-                return Err(Error::EndOfBuffer);
+                return Err(Error::EndOfBuffer(Marker::Array16));
             }
         }
         #[cfg(feature = "array32")]
         Marker::Array32 => {
             let header_len = 5;
             if buf.len() < header_len {
-                return Err(Error::EndOfBuffer);
+                return Err(Error::EndOfBuffer(Marker::Array32));
             }
             let len = BigEndian::read_u32(&buf[1..header_len]) as usize;
             if buf.len() >= header_len + len {
                 (header_len, len)
             } else {
-                return Err(Error::EndOfBuffer);
+                return Err(Error::EndOfBuffer(Marker::Array32));
             }
         }
         _ => return Err(Error::InvalidArrayType),
@@ -518,7 +531,7 @@ pub fn read_array_len<B: ByteSlice>(buf: B) -> Result<(usize, usize), Error> {
 
 pub fn read_map_len<B: ByteSlice>(buf: B) -> Result<(usize, usize), Error> {
     if buf.len() == 0 {
-        return Err(Error::EndOfBuffer);
+        return Err(Error::EndOfBuffer(Marker::Map32));
     }
 
     let marker = Marker::from(buf[0]);
@@ -532,7 +545,7 @@ pub fn read_map_len<B: ByteSlice>(buf: B) -> Result<(usize, usize), Error> {
         Marker::Map16 => {
             let header_len = 3;
             if buf.len() < header_len {
-                return Err(Error::EndOfBuffer);
+                return Err(Error::EndOfBuffer(Marker::Map16));
             }
             let len = BigEndian::read_u16(&buf[1..header_len]) as usize;
             (len, header_len)
@@ -541,17 +554,18 @@ pub fn read_map_len<B: ByteSlice>(buf: B) -> Result<(usize, usize), Error> {
         Marker::Map32 => {
             let header_len = 5;
             if buf.len() < header_len {
-                return Err(Error::EndOfBuffer);
+                return Err(Error::EndOfBuffer(Marker::Map32));
             }
             let len = BigEndian::read_u32(&buf[1..header_len]) as usize;
             (len, header_len)
         }
+
         _ => return Err(Error::InvalidMapType),
     };
     if buf.len() >= header_len + len {
         Ok((len, header_len))
     } else {
-        Err(Error::EndOfBuffer)
+        Err(Error::EndOfBuffer(Marker::Map32))
     }
 }
 
@@ -580,19 +594,19 @@ pub fn skip_any<B: ByteSlice>(buf: B) -> Result<((), usize), Error> {
         Marker::FixStr(n) => n as usize + 1,
         Marker::Str8 | Marker::Bin8 => {
             if buf.len() < 2 {
-                return Err(Error::EndOfBuffer);
+                return Err(Error::EndOfBuffer(Marker::Str8));
             }
             2 + buf[1] as usize
         }
         Marker::Str16 | Marker::Bin16 => {
             if buf.len() < 3 {
-                return Err(Error::EndOfBuffer);
+                return Err(Error::EndOfBuffer(Marker::Str16));
             }
             3 + BigEndian::read_u16(&buf[1..3]) as usize
         }
         Marker::Str32 | Marker::Bin32 => {
             if buf.len() < 5 {
-                return Err(Error::EndOfBuffer);
+                return Err(Error::EndOfBuffer(Marker::Str32));
             }
             5 + BigEndian::read_u32(&buf[1..5]) as usize
         }
@@ -622,25 +636,25 @@ pub fn skip_any<B: ByteSlice>(buf: B) -> Result<((), usize), Error> {
         Marker::FixExt16 => 18,
         Marker::Ext8 => {
             if buf.len() < 2 {
-                return Err(Error::EndOfBuffer);
+                return Err(Error::EndOfBuffer(Marker::Ext8));
             }
             3 + buf[1] as usize
         }
         Marker::Ext16 => {
             if buf.len() < 3 {
-                return Err(Error::EndOfBuffer);
+                return Err(Error::EndOfBuffer(Marker::Ext16));
             }
             4 + BigEndian::read_u16(&buf[1..3]) as usize
         }
         Marker::Ext32 => {
             if buf.len() < 5 {
-                return Err(Error::EndOfBuffer);
+                return Err(Error::EndOfBuffer(Marker::Ext32));
             }
             6 + BigEndian::read_u32(&buf[1..5]) as usize
         }
     };
     if buf.len() < n {
-        return Err(Error::EndOfBuffer);
+        return Err(Error::EndOfBuffer(Marker::Ext32));
     }
     Ok(((), n))
 }

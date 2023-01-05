@@ -53,11 +53,17 @@ pub(crate) struct Deserializer<'b> {
 }
 
 impl<'a> Deserializer<'a> {
-    pub const fn new(slice: &'a [u8]) -> Deserializer<'_> { Deserializer { slice, index: 0 } }
+    pub const fn new(slice: &'a [u8]) -> Deserializer<'_> {
+        Deserializer { slice, index: 0 }
+    }
 
-    fn eat_byte(&mut self) { self.index += 1; }
+    fn eat_byte(&mut self) {
+        self.index += 1;
+    }
 
-    fn peek(&mut self) -> Option<Marker> { Some(Marker::from_u8(*self.slice.get(self.index)?)) }
+    fn peek(&mut self) -> Option<Marker> {
+        Some(Marker::from_u8(*self.slice.get(self.index)?))
+    }
 }
 
 macro_rules! deserialize_primitives {
@@ -97,7 +103,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
 
     fn deserialize_option<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
         print_debug::<V>("Deserializer::deserialize_", "option", &self);
-        let marker = self.peek().ok_or(Error::EndOfBuffer)?;
+        let marker = self.peek().ok_or(Error::EndOfBuffer(Marker::Reserved))?;
         match marker {
             Marker::Null => {
                 self.eat_byte();
@@ -163,7 +169,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     /// Unsupported. Use a more specific deserialize_* method
     fn deserialize_unit<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
         print_debug::<V>("Deserializer::deserialize_", "unit", &self);
-        let marker = self.peek().ok_or(Error::EndOfBuffer)?;
+        let marker = self.peek().ok_or(Error::EndOfBuffer(Marker::Reserved))?;
         match marker {
             Marker::Null | Marker::FixArray(0) => {
                 self.eat_byte();
@@ -196,7 +202,9 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_i64<V>(self, visitor: V) -> core::result::Result<V::Value, Self::Error>
-    where V: Visitor<'de> {
+    where
+        V: Visitor<'de>,
+    {
         print_debug::<V>("Deserializer::deserialize_", "i64", &self);
         let (value, len) = super::read_i64(&self.slice[self.index..])?;
         self.index += len;
@@ -205,7 +213,9 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_u64<V>(self, visitor: V) -> core::result::Result<V::Value, Self::Error>
-    where V: Visitor<'de> {
+    where
+        V: Visitor<'de>,
+    {
         print_debug::<V>("Deserializer::deserialize_", "u64", &self);
         let (value, len) = super::read_u64(&self.slice[self.index..])?;
         self.index += len;
@@ -214,7 +224,9 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_f64<V>(self, visitor: V) -> core::result::Result<V::Value, Self::Error>
-    where V: Visitor<'de> {
+    where
+        V: Visitor<'de>,
+    {
         print_debug::<V>("Deserializer::deserialize_", "f64", &self);
         let (value, len) = super::read_f64(&self.slice[self.index..])?;
         self.index += len;
@@ -223,7 +235,9 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_bool<V>(self, visitor: V) -> core::result::Result<V::Value, Self::Error>
-    where V: Visitor<'de> {
+    where
+        V: Visitor<'de>,
+    {
         print_debug::<V>("Deserializer::deserialize_", "bool", &self);
         let (value, len) = super::read_bool(&self.slice[self.index..])?;
         self.index += len;
@@ -236,7 +250,9 @@ impl ::serde::de::StdError for Error {}
 impl de::Error for Error {
     #[cfg_attr(not(feature = "custom-error-messages"), allow(unused_variables))]
     fn custom<T>(msg: T) -> Self
-    where T: fmt::Display {
+    where
+        T: fmt::Display,
+    {
         #[cfg(not(feature = "custom-error-messages"))]
         {
             Error::CustomError
@@ -255,13 +271,21 @@ impl de::Error for Error {
 impl fmt::Display for Error {
     #[cfg(debug_assertions)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        #[cfg(feature = "std")]
+        let mut s = String::new();
         write!(
             f,
             "{}",
             match self {
                 Error::InvalidType => "Unexpected type encountered.",
                 Error::OutOfBounds => "Index out of bounds.",
-                Error::EndOfBuffer => "End of buffer reached.",
+                #[cfg(not(feature = "std"))]
+                Error::EndOfBuffer(_) => "End of buffer reached.",
+                #[cfg(feature = "std")]
+                Error::EndOfBuffer(m) => {
+                    s = format!("End of buffer reached: {}", u8::from(*m));
+                    s.as_str()
+                }
                 Error::CustomError => "Did not match deserializer's expected format.",
                 #[cfg(feature = "custom-error-messages")]
                 Error::CustomErrorWithMessage(msg) => msg.as_str(),
@@ -272,9 +296,12 @@ impl fmt::Display for Error {
                 Error::InvalidArrayType => "Invalid array marker.",
                 Error::InvalidMapType => "Invalid map marker.",
                 Error::InvalidNewTypeLength => "Invalid array length for newtype.",
+                Error::InvalidUtf8(_) => "Invalid Utf8.",
             }
         )
     }
     #[cfg(not(debug_assertions))]
-    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result { Ok(()) }
+    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Ok(())
+    }
 }

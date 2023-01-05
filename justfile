@@ -21,5 +21,8 @@ test-alloc:
 test-compliant:
   cargo test --features=compliant
 
+test-serde:
+  cargo test --features=std --features=serde --compliant
+
 fmt:
   cargo +nightly fmt

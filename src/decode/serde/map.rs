@@ -32,7 +32,7 @@ impl<'a, 'de> de::MapAccess<'de> for MapAccess<'a, 'de> {
             self.count -= 1;
             Ok(seed.deserialize(&mut *self.de)?)
         } else {
-            Err(Error::EndOfBuffer)
+            Err(Error::EndOfBuffer(crate::marker::Marker::Reserved))
         }
     }
 }
