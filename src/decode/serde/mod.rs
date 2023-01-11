@@ -257,7 +257,7 @@ impl de::Error for Error {
         {
             Error::CustomError
         }
-        #[cfg(feature = "custom-error-messages")]
+        #[cfg(all(not(feature = "std"), feature = "custom-error-messages"))]
         {
             use core::fmt::Write;
 
@@ -265,14 +265,17 @@ impl de::Error for Error {
             write!(string, "{:.64}", msg).unwrap();
             Error::CustomErrorWithMessage(string)
         }
+        #[cfg(all(feature = "std", feature = "custom-error-messages"))]
+        {
+            Error::CustomErrorWithMessage(msg.to_string())
+        }
     }
 }
 
 impl fmt::Display for Error {
-    #[cfg(debug_assertions)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         #[cfg(feature = "std")]
-        let mut s = String::new();
+        let s;
         write!(
             f,
             "{}",
@@ -299,9 +302,5 @@ impl fmt::Display for Error {
                 Error::InvalidUtf8(_) => "Invalid Utf8.",
             }
         )
-    }
-    #[cfg(not(debug_assertions))]
-    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        Ok(())
     }
 }

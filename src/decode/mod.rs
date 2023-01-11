@@ -21,8 +21,10 @@ pub enum Error {
     /// Happens if the data type does not match the expected type.
     InvalidType,
     CustomError,
-    #[cfg(feature = "custom-error-messages")]
+    #[cfg(all(not(feature = "std"), feature = "custom-error-messages"))]
     CustomErrorWithMessage(heapless::String<64>),
+    #[cfg(all(feature = "std", feature = "custom-error-messages"))]
+    CustomErrorWithMessage(String),
     NotAscii,
     InvalidBoolean,
     InvalidBinType,
