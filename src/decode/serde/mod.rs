@@ -156,7 +156,6 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     /// Unsupported. Can’t parse a value without knowing its expected type.
     fn deserialize_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
         let marker = self.peek().ok_or(Error::EndOfBuffer(Marker::Reserved))?;
-        println!("marker: {:?}", marker);
         match marker {
             Marker::FixMap(_) => self.deserialize_map(visitor),
             Marker::Map16 => self.deserialize_map(visitor),
