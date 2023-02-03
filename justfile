@@ -22,7 +22,7 @@ test-compliant:
   cargo test --features=compliant
 
 test-serde:
-  cargo test --features=std --features=serde --compliant
+  cargo test --features=std --features=serde --features=compliant
 
 fmt:
   cargo +nightly fmt

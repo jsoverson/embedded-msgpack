@@ -42,6 +42,7 @@ fn print_debug_value<T, V: core::fmt::Debug>(function_name: &str, de: &Deseriali
         &de.slice[de.index..core::cmp::min(de.slice.len(), de.index + 10)]
     );
 }
+
 #[cfg(not(test))]
 fn print_debug<T>(_prefix: &str, _function_name: &str, _de: &Deserializer) {}
 #[cfg(not(test))]
@@ -154,10 +155,40 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
 
     /// Unsupported. Can’t parse a value without knowing its expected type.
     fn deserialize_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-        print_debug::<V>("Deserializer::deserialize_", "any", &self);
-        let (_, n) = super::skip_any(&self.slice[self.index..])?;
-        self.index += n;
-        visitor.visit_unit()
+        let marker = self.peek().ok_or(Error::EndOfBuffer(Marker::Reserved))?;
+        println!("marker: {:?}", marker);
+        match marker {
+            Marker::FixMap(_) => self.deserialize_map(visitor),
+            Marker::Map16 => self.deserialize_map(visitor),
+            Marker::Map32 => self.deserialize_map(visitor),
+            Marker::FixArray(_) => self.deserialize_seq(visitor),
+            Marker::Array16 => self.deserialize_seq(visitor),
+            Marker::Array32 => self.deserialize_seq(visitor),
+            Marker::Str16 => self.deserialize_str(visitor),
+            Marker::Str32 => self.deserialize_str(visitor),
+            Marker::Bin8 => self.deserialize_bytes(visitor),
+            Marker::Bin16 => self.deserialize_bytes(visitor),
+            Marker::Bin32 => self.deserialize_bytes(visitor),
+            Marker::FixStr(_) => self.deserialize_str(visitor),
+            Marker::F32 => self.deserialize_f32(visitor),
+            Marker::F64 => self.deserialize_f64(visitor),
+            Marker::I16 => self.deserialize_i16(visitor),
+            Marker::I32 => self.deserialize_i32(visitor),
+            Marker::I64 => self.deserialize_i64(visitor),
+            Marker::I8 => self.deserialize_i8(visitor),
+            Marker::U16 => self.deserialize_u16(visitor),
+            Marker::U32 => self.deserialize_u32(visitor),
+            Marker::U64 => self.deserialize_u64(visitor),
+            Marker::U8 => self.deserialize_u8(visitor),
+            Marker::True => self.deserialize_bool(visitor),
+            Marker::False => self.deserialize_bool(visitor),
+            _ => {
+                print_debug::<V>("Deserializer::deserialize_", "any", &self);
+                let (_, n) = super::skip_any(&self.slice[self.index..])?;
+                self.index += n;
+                visitor.visit_unit()
+            }
+        }
     }
 
     /// Used to throw out fields that we don’t want to keep in our structs.
