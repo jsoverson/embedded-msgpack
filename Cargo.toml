@@ -1,7 +1,7 @@
 [package]
 name = "wasm-msgpack"
 description = "MessagePack serialization implementation for Rust optimized for WebAssembly environments"
-version = "0.3.2"
+version = "0.3.3"
 repository = "https://github.com/jsoverson/wasm-msgpack"
 documentation = "https://docs.rs/wasm-msgpack"
 readme = "./README.md"
