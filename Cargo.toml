@@ -30,8 +30,34 @@ serde_repr = { version = "0.1", default-features = false }
 serde_json = { version = "1.0" }
 
 [features]
-default = ["u64", "i64", "bin16", "timestamp", "serde", "serde_bytes", "ext8"]
-std = ["byteorder/std", "num-traits/std", "serde_bytes/std", "serde/std"]
+default = ["wasm"]
+embedded = ["u64", "i64", "bin16", "timestamp", "serde", "serde_bytes", "ext8"]
+wasm = [
+  "std",
+  "alloc",
+  "timestamp",
+  "i64",
+  "u64",
+  "bin32",
+  "map32",
+  "array32",
+  "str32",
+  "fixext",
+  "ext",
+  "custom-error-messages",
+  "ext8",
+  "ext16",
+  "ext32",
+  "serde",
+  "serde_bytes",
+]
+std = [
+  "byteorder/std",
+  "num-traits/std",
+  "serde_bytes/std",
+  "serde/std",
+  "derive-debug"
+]
 alloc = ["serde/alloc", "serde_bytes/alloc"]
 u64 = []
 i64 = []
@@ -48,7 +74,7 @@ fixext = ["ext"]
 ext8 = ["ext"]
 ext16 = ["ext"]
 ext32 = ["ext"]
-timestamp = ["ext"]
+timestamp = ["ext", "fixext"]
 timestamp96 = ["timestamp", "ext8"]
 compliant = [
   "i64",
@@ -69,3 +95,4 @@ compliant = [
 ]
 all = ["compliant", "std", "serde"]
 "custom-error-messages" = ["heapless"]
+"derive-debug" = []

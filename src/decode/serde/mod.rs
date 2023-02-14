@@ -44,18 +44,25 @@ fn print_debug_value<T, V: core::fmt::Debug>(function_name: &str, de: &Deseriali
 }
 
 #[cfg(not(test))]
+#[allow(clippy::missing_const_for_fn)]
 fn print_debug<T>(_prefix: &str, _function_name: &str, _de: &Deserializer) {}
 #[cfg(not(test))]
+#[allow(clippy::missing_const_for_fn)]
 fn print_debug_value<T, V: core::fmt::Debug>(_function_name: &str, _de: &Deserializer, _value: &V) {}
 
 pub(crate) struct Deserializer<'b> {
     slice: &'b [u8],
     index: usize,
+    state: State,
 }
 
 impl<'a> Deserializer<'a> {
     pub const fn new(slice: &'a [u8]) -> Deserializer<'_> {
-        Deserializer { slice, index: 0 }
+        Deserializer {
+            slice,
+            index: 0,
+            state: State::Normal,
+        }
     }
 
     fn eat_byte(&mut self) {
@@ -76,34 +83,63 @@ macro_rules! deserialize_primitives {
     };
 }
 
+enum State {
+    Normal,
+    Ext(usize),
+}
+
 impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     type Error = Error;
 
-    deserialize_primitives!(i64, i8, i16, i32);
+    deserialize_primitives!(i64, i16, i32);
     deserialize_primitives!(u64, u8, u16, u32);
     deserialize_primitives!(f64, f32);
 
+    fn deserialize_i8<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: Visitor<'de>,
+    {
+        print_debug::<V>("Deserializer::deserialize_", "i8", self);
+        let (value, len) = match self.state {
+            State::Normal => super::read_i8(&self.slice[self.index..])?,
+            // read the ext type as raw byte and not encoded as a normal i8
+            #[cfg(feature = "ext")]
+            State::Ext(_) => (self.slice[self.index] as i8, 1),
+        };
+        self.index += len;
+        print_debug_value::<i8, i8>("Deserializer::deserialize_i8", self, &value);
+        visitor.visit_i8(value)
+    }
+
     fn deserialize_str<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-        print_debug::<V>("Deserializer::deserialize_", "str", &self);
+        print_debug::<V>("Deserializer::deserialize_", "str", self);
         let (s, len) = super::read_str(&self.slice[self.index..])?;
         self.index += len;
         visitor.visit_borrowed_str(s)
     }
 
     fn deserialize_bytes<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-        print_debug::<V>("Deserializer::deserialize_", "bytes", &self);
-        let (value, len) = super::read_bin(&self.slice[self.index..])?;
+        print_debug::<V>("Deserializer::deserialize_", "bytes", self);
+        let (value, len) = match self.state {
+            State::Normal => super::read_bin(&self.slice[self.index..])?,
+            // read the ext type as raw byte and not encoded as a normal i8
+            #[cfg(feature = "ext")]
+            State::Ext(len) => {
+                self.state = State::Normal;
+                (&self.slice[self.index..self.index + len], len)
+            }
+        };
         self.index += len;
         visitor.visit_borrowed_bytes(value)
     }
 
     fn deserialize_byte_buf<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-        print_debug::<V>("Deserializer::deserialize_", "byte_buf", &self);
+        print_debug::<V>("Deserializer::deserialize_", "byte_buf", self);
         self.deserialize_bytes(visitor)
     }
 
     fn deserialize_option<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-        print_debug::<V>("Deserializer::deserialize_", "option", &self);
+        print_debug::<V>("Deserializer::deserialize_", "option", self);
         let marker = self.peek().ok_or(Error::EndOfBuffer(Marker::Reserved))?;
         match marker {
             Marker::Null => {
@@ -115,41 +151,66 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_seq<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-        print_debug::<V>("Deserializer::deserialize_", "seq", &self);
+        print_debug::<V>("Deserializer::deserialize_", "seq", self);
         let (len, header_len) = crate::decode::read_array_len(&self.slice[self.index..])?;
         self.index += header_len;
         visitor.visit_seq(SeqAccess::new(self, len))
     }
 
     fn deserialize_tuple<V: Visitor<'de>>(self, _len: usize, visitor: V) -> Result<V::Value> {
-        print_debug::<V>("Deserializer::deserialize_", "tuple", &self);
+        print_debug::<V>("Deserializer::deserialize_", "tuple", self);
         self.deserialize_seq(visitor)
     }
 
     fn deserialize_tuple_struct<V: Visitor<'de>>(self, _name: &'static str, _len: usize, visitor: V) -> Result<V::Value> {
-        print_debug::<V>("Deserializer::deserialize_", "tuple_struct", &self);
+        print_debug::<V>("Deserializer::deserialize_", "tuple_struct", self);
         self.deserialize_seq(visitor)
     }
 
     fn deserialize_map<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-        print_debug::<V>("Deserializer::deserialize_", "map", &self);
+        print_debug::<V>("Deserializer::deserialize_", "map", self);
         let (len, header_len) = crate::decode::read_map_len(&self.slice[self.index..])?;
         self.index += header_len;
         visitor.visit_map(MapAccess::new(self, len))
     }
 
-    fn deserialize_struct<V: Visitor<'de>>(self, _name: &'static str, _fields: &'static [&'static str], visitor: V) -> Result<V::Value> {
-        print_debug::<V>("Deserializer::deserialize_", "struct", &self);
-        self.deserialize_map(visitor)
+    fn deserialize_struct<V: Visitor<'de>>(self, name: &'static str, _fields: &'static [&'static str], visitor: V) -> Result<V::Value> {
+        print_debug::<V>("Deserializer::deserialize_", "struct", self);
+        match name {
+            #[cfg(feature = "ext")]
+            crate::ext::TYPE_NAME | crate::timestamp::TYPE_NAME => {
+                if let Some(marker) = self.peek() {
+                    match marker {
+                        Marker::FixExt1
+                        | Marker::FixExt2
+                        | Marker::FixExt4
+                        | Marker::FixExt8
+                        | Marker::FixExt16
+                        | Marker::Ext8
+                        | Marker::Ext16
+                        | Marker::Ext32 => {
+                            let (header_len, data_len) = crate::ext::read_ext_len(&self.slice[self.index..])?;
+                            self.index += header_len - 1; // move forward minus 1 byte for the ext type (header_len includes the type byte)
+                            self.state = State::Ext(data_len);
+                            visitor.visit_seq(SeqAccess::new(self, 2))
+                        }
+                        _ => Err(Error::InvalidType),
+                    }
+                } else {
+                    Err(Error::EndOfBuffer(Marker::Reserved))
+                }
+            }
+            _ => self.deserialize_map(visitor),
+        }
     }
 
     fn deserialize_enum<V: Visitor<'de>>(self, _name: &'static str, _variants: &'static [&'static str], visitor: V) -> Result<V::Value> {
-        print_debug::<V>("Deserializer::deserialize_", "enum", &self);
+        print_debug::<V>("Deserializer::deserialize_", "enum", self);
         visitor.visit_enum(UnitVariantAccess::new(self))
     }
 
     fn deserialize_identifier<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-        print_debug::<V>("Deserializer::deserialize_", "identifier", &self);
+        print_debug::<V>("Deserializer::deserialize_", "identifier", self);
         self.deserialize_str(visitor)
     }
 
@@ -182,7 +243,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
             Marker::True => self.deserialize_bool(visitor),
             Marker::False => self.deserialize_bool(visitor),
             _ => {
-                print_debug::<V>("Deserializer::deserialize_", "any", &self);
+                print_debug::<V>("Deserializer::deserialize_", "any", self);
                 let (_, n) = super::skip_any(&self.slice[self.index..])?;
                 self.index += n;
                 visitor.visit_unit()
@@ -192,13 +253,13 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
 
     /// Used to throw out fields that we don’t want to keep in our structs.
     fn deserialize_ignored_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-        print_debug::<V>("Deserializer::deserialize_", "ignored_any", &self);
+        print_debug::<V>("Deserializer::deserialize_", "ignored_any", self);
         self.deserialize_any(visitor)
     }
 
     /// Unsupported. Use a more specific deserialize_* method
     fn deserialize_unit<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-        print_debug::<V>("Deserializer::deserialize_", "unit", &self);
+        print_debug::<V>("Deserializer::deserialize_", "unit", self);
         let marker = self.peek().ok_or(Error::EndOfBuffer(Marker::Reserved))?;
         match marker {
             Marker::Null | Marker::FixArray(0) => {
@@ -211,23 +272,23 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
 
     /// Unsupported. Use a more specific deserialize_* method
     fn deserialize_unit_struct<V: Visitor<'de>>(self, _name: &'static str, visitor: V) -> Result<V::Value> {
-        print_debug::<V>("Deserializer::deserialize_", "unit_struct", &self);
+        print_debug::<V>("Deserializer::deserialize_", "unit_struct", self);
         self.deserialize_unit(visitor)
     }
 
     fn deserialize_char<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-        print_debug::<V>("Deserializer::deserialize_", "char", &self);
+        print_debug::<V>("Deserializer::deserialize_", "char", self);
         //TODO Need to decide how to encode this. Probably as a str?
         self.deserialize_str(visitor)
     }
 
     fn deserialize_newtype_struct<V: Visitor<'de>>(self, _name: &'static str, visitor: V) -> Result<V::Value> {
-        print_debug::<V>("Deserializer::deserialize_", "newtype_struct", &self);
+        print_debug::<V>("Deserializer::deserialize_", "newtype_struct", self);
         visitor.visit_newtype_struct(self)
     }
 
     fn deserialize_string<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-        print_debug::<V>("Deserializer::deserialize_", "string", &self);
+        print_debug::<V>("Deserializer::deserialize_", "string", self);
         self.deserialize_str(visitor)
     }
 
@@ -235,10 +296,10 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        print_debug::<V>("Deserializer::deserialize_", "i64", &self);
+        print_debug::<V>("Deserializer::deserialize_", "i64", self);
         let (value, len) = super::read_i64(&self.slice[self.index..])?;
         self.index += len;
-        print_debug_value::<i64, i64>("Deserializer::deserialize_i64", &self, &value);
+        print_debug_value::<i64, i64>("Deserializer::deserialize_i64", self, &value);
         visitor.visit_i64(value)
     }
 
@@ -246,10 +307,10 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        print_debug::<V>("Deserializer::deserialize_", "u64", &self);
+        print_debug::<V>("Deserializer::deserialize_", "u64", self);
         let (value, len) = super::read_u64(&self.slice[self.index..])?;
         self.index += len;
-        print_debug_value::<u64, u64>("Deserializer::deserialize_u64", &self, &value);
+        print_debug_value::<u64, u64>("Deserializer::deserialize_u64", self, &value);
         visitor.visit_u64(value)
     }
 
@@ -257,10 +318,10 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        print_debug::<V>("Deserializer::deserialize_", "f64", &self);
+        print_debug::<V>("Deserializer::deserialize_", "f64", self);
         let (value, len) = super::read_f64(&self.slice[self.index..])?;
         self.index += len;
-        print_debug_value::<f64, f64>("Deserializer::deserialize_f64", &self, &value);
+        print_debug_value::<f64, f64>("Deserializer::deserialize_f64", self, &value);
         visitor.visit_f64(value)
     }
 
@@ -268,10 +329,10 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        print_debug::<V>("Deserializer::deserialize_", "bool", &self);
+        print_debug::<V>("Deserializer::deserialize_", "bool", self);
         let (value, len) = super::read_bool(&self.slice[self.index..])?;
         self.index += len;
-        print_debug_value::<bool, bool>("Deserializer::deserialize_bool", &self, &value);
+        print_debug_value::<bool, bool>("Deserializer::deserialize_bool", self, &value);
         visitor.visit_bool(value)
     }
 }

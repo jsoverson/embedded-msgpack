@@ -225,7 +225,7 @@ pub fn read_u64<B: ByteSlice>(buf: B) -> Result<(u64, usize), Error> {
         // Nur u64 muss hier gesondert behandelt werden, weil es der einzige Typ ist, der potentiell nicht in i64 passt
         Marker::U64 => {
             if buf.len() >= 9 {
-                Ok((BigEndian::read_u64(&buf[1..9]) as u64, 9))
+                Ok((BigEndian::read_u64(&buf[1..9]), 9))
             } else {
                 Err(Error::EndOfBuffer(Marker::U64))
             }
@@ -478,7 +478,7 @@ pub fn read_str(buf: &[u8]) -> Result<(&str, usize), Error> {
         _ => return Err(Error::InvalidStringType),
     };
     let buf = &buf[header_len..header_len + len];
-    let s = core::str::from_utf8(buf).map_err(|e| Error::InvalidUtf8(e))?;
+    let s = core::str::from_utf8(buf).map_err(Error::InvalidUtf8)?;
 
     Ok((s, header_len + len))
 }

@@ -11,16 +11,28 @@ mod struct_;
 use super::Error;
 use crate::encode::SerializeIntoSlice;
 
+enum State {
+    Normal,
+    #[cfg(feature = "ext")]
+    Ext(Option<i8>),
+    #[cfg(feature = "timestamp")]
+    Timestamp(Option<i64>, Option<u32>),
+}
+
 pub(crate) struct Serializer<'a> {
     buf: &'a mut [u8],
     pos: usize,
+    state: State,
 }
 
 impl<'a> Serializer<'a> {
     fn new(buf: &'a mut [u8]) -> Self {
-        Serializer { buf, pos: 0 }
+        Serializer {
+            buf,
+            pos: 0,
+            state: State::Normal,
+        }
     }
-    #[allow(clippy::clippy::needless_pass_by_value)]
     fn append<S: SerializeIntoSlice>(&mut self, value: S) -> Result<(), Error> {
         self.pos += value.write_into_slice(&mut self.buf[self.pos..])?;
         Ok(())
@@ -41,7 +53,7 @@ impl<'a, 'b> ser::Serializer for &'a mut Serializer<'b> {
     type SerializeSeq = SerializeSeq<'a, 'b>;
     type SerializeTuple = SerializeSeq<'a, 'b>;
     type SerializeTupleStruct = Unreachable;
-    type SerializeTupleVariant = Unreachable;
+    type SerializeTupleVariant = &'a mut Serializer<'b>;
     type SerializeMap = SerializeMap<'a, 'b>;
     type SerializeStruct = SerializeStruct<'a, 'b>;
     type SerializeStructVariant = Unreachable;
@@ -50,7 +62,15 @@ impl<'a, 'b> ser::Serializer for &'a mut Serializer<'b> {
         self.append(v)
     }
     fn serialize_i8(self, v: i8) -> Result<Self::Ok, Self::Error> {
-        self.append(v)
+        match self.state {
+            #[cfg(feature = "ext")]
+            State::Ext(_) => {
+                // serialize Ext type
+                self.state = State::Ext(Some(v));
+                Ok(())
+            }
+            _ => self.append(v),
+        }
     }
     fn serialize_i16(self, v: i16) -> Result<Self::Ok, Self::Error> {
         self.append(v)
@@ -101,8 +121,20 @@ impl<'a, 'b> ser::Serializer for &'a mut Serializer<'b> {
     }
 
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
-        let v = super::Binary::new(v);
-        self.append(v)
+        match self.state {
+            #[cfg(feature = "ext")]
+            State::Ext(typ) => {
+                let typ = typ.ok_or(Error::InvalidType)?;
+                self.state = State::Normal;
+                let ext = crate::Ext::new(typ, v);
+                self.pos += (&ext).write_into_slice(&mut self.buf[self.pos..])?;
+                Ok(())
+            }
+            _ => {
+                let v = super::Binary::new(v);
+                self.append(v)
+            }
+        }
     }
 
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
@@ -146,7 +178,7 @@ impl<'a, 'b> ser::Serializer for &'a mut Serializer<'b> {
     where
         T: ser::Serialize,
     {
-        unreachable!()
+        unimplemented!()
     }
 
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
@@ -159,7 +191,7 @@ impl<'a, 'b> ser::Serializer for &'a mut Serializer<'b> {
     }
 
     fn serialize_tuple_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
-        unreachable!()
+        unimplemented!()
     }
 
     fn serialize_tuple_variant(
@@ -169,7 +201,7 @@ impl<'a, 'b> ser::Serializer for &'a mut Serializer<'b> {
         _variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        unreachable!()
+        unimplemented!()
     }
 
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
@@ -177,8 +209,22 @@ impl<'a, 'b> ser::Serializer for &'a mut Serializer<'b> {
         Ok(SerializeMap::new(self))
     }
 
-    fn serialize_struct(self, _name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
-        self.pos += super::serialize_map_start(len, &mut self.buf[self.pos..])?;
+    fn serialize_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeStruct, Self::Error> {
+        match name {
+            #[cfg(feature = "ext")]
+            crate::ext::TYPE_NAME => {
+                // special handling to support serializing MsgPack Ext type
+                // SerializeStruct will reset `self.serializing_ext` when `end()` is called on it
+                self.state = State::Ext(None);
+            }
+            #[cfg(feature = "timestamp")]
+            crate::timestamp::TYPE_NAME => {
+                self.state = State::Timestamp(None, None);
+            }
+            _ => {
+                self.pos += super::serialize_map_start(len, &mut self.buf[self.pos..])?;
+            }
+        }
         Ok(SerializeStruct::new(self))
     }
 
@@ -189,14 +235,14 @@ impl<'a, 'b> ser::Serializer for &'a mut Serializer<'b> {
         _variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        unreachable!()
+        unimplemented!()
     }
 
     fn collect_str<T: ?Sized>(self, _value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: core::fmt::Display,
     {
-        unreachable!()
+        unimplemented!()
     }
 }
 
@@ -217,13 +263,30 @@ impl ser::Error for Error {
     where
         T: core::fmt::Display,
     {
-        unreachable!()
+        unimplemented!()
+    }
+}
+
+impl<'a, 'b> ::serde::ser::SerializeTupleVariant for &'a mut Serializer<'b> {
+    type Ok = ();
+    type Error = Error;
+
+    fn serialize_field<T>(&mut self, value: &T) -> Result<(), Error>
+    where
+        T: ?Sized + serde::Serialize,
+    {
+        value.serialize(&mut **self)
+    }
+
+    fn end(self) -> Result<(), Error> {
+        self.state = State::Normal;
+        Ok(())
     }
 }
 
 pub(crate) enum Unreachable {}
 
-impl ser::SerializeTupleStruct for Unreachable {
+impl ::serde::ser::SerializeTupleStruct for Unreachable {
     type Ok = ();
     type Error = Error;
 
@@ -236,7 +299,7 @@ impl ser::SerializeTupleStruct for Unreachable {
     }
 }
 
-impl ser::SerializeTupleVariant for Unreachable {
+impl ::serde::ser::SerializeTupleVariant for Unreachable {
     type Ok = ();
     type Error = Error;
 
@@ -249,20 +312,20 @@ impl ser::SerializeTupleVariant for Unreachable {
     }
 }
 
-impl ser::SerializeMap for Unreachable {
+impl ::serde::ser::SerializeMap for Unreachable {
     type Ok = ();
     type Error = Error;
 
     fn serialize_key<T: ?Sized>(&mut self, _key: &T) -> Result<Self::Ok, Self::Error>
     where
-        T: ser::Serialize,
+        T: ::serde::ser::Serialize,
     {
         unreachable!()
     }
 
     fn serialize_value<T: ?Sized>(&mut self, _value: &T) -> Result<Self::Ok, Self::Error>
     where
-        T: ser::Serialize,
+        T: ::serde::ser::Serialize,
     {
         unreachable!()
     }
@@ -272,17 +335,62 @@ impl ser::SerializeMap for Unreachable {
     }
 }
 
-impl ser::SerializeStructVariant for Unreachable {
+impl ::serde::ser::SerializeStructVariant for Unreachable {
     type Ok = ();
     type Error = Error;
 
     fn serialize_field<T: ?Sized>(&mut self, _key: &'static str, _value: &T) -> Result<Self::Ok, Self::Error>
     where
-        T: ser::Serialize,
+        T: ::serde::ser::Serialize,
     {
         unreachable!()
     }
 
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        unreachable!()
+    }
+}
+
+impl ::serde::ser::SerializeTuple for Unreachable {
+    type Ok = ();
+    type Error = Error;
+
+    fn serialize_element<T: ?Sized>(&mut self, _value: &T) -> Result<(), Self::Error>
+    where
+        T: serde::Serialize,
+    {
+        unreachable!()
+    }
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        unreachable!()
+    }
+}
+
+impl ::serde::ser::SerializeSeq for Unreachable {
+    type Ok = ();
+    type Error = Error;
+
+    fn serialize_element<T: ?Sized>(&mut self, _value: &T) -> Result<(), Self::Error>
+    where
+        T: serde::Serialize,
+    {
+        unreachable!()
+    }
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        unreachable!()
+    }
+}
+
+impl ::serde::ser::SerializeStruct for Unreachable {
+    type Ok = ();
+    type Error = Error;
+
+    fn serialize_field<T: ?Sized>(&mut self, _key: &'static str, _value: &T) -> Result<(), Self::Error>
+    where
+        T: serde::Serialize,
+    {
+        unreachable!()
+    }
     fn end(self) -> Result<Self::Ok, Self::Error> {
         unreachable!()
     }
