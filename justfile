@@ -1,5 +1,6 @@
 
 test:
+  just tests/ensure_no_std/build
   just test-default
   just test-no-default
   just test-std

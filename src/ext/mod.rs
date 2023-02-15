@@ -11,9 +11,14 @@ use serde::{ser::SerializeStruct, Deserialize, Serialize};
 
 #[repr(transparent)]
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[cfg_attr(any(test, feature = "derive-debug"), derive(core::fmt::Debug))]
 #[serde(transparent)]
 struct ExtType(i8);
+
+impl core::fmt::Debug for ExtType {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_tuple("ExtType").field(&self.0).finish()
+    }
+}
 
 impl Display for ExtType {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -26,10 +31,15 @@ impl Display for ExtType {
 }
 
 #[derive(PartialEq, Eq)]
-#[cfg_attr(any(test, feature = "derive-debug"), derive(core::fmt::Debug))]
 pub struct Ext<'a> {
     typ: ExtType,
     data: Binary<'a>,
+}
+
+impl<'a> core::fmt::Debug for Ext<'a> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Ext").field("typ", &self.typ).field("data", &self.data).finish()
+    }
 }
 
 impl<'a> Ext<'a> {

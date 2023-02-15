@@ -33,8 +33,6 @@ serde_json = { version = "1.0" }
 default = ["wasm"]
 embedded = ["u64", "i64", "bin16", "timestamp", "serde", "serde_bytes", "ext8"]
 wasm = [
-  "std",
-  "alloc",
   "timestamp",
   "i64",
   "u64",
@@ -50,6 +48,7 @@ wasm = [
   "ext32",
   "serde",
   "serde_bytes",
+  "compliant"
 ]
 std = [
   "byteorder/std",

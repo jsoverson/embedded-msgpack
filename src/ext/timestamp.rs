@@ -14,10 +14,18 @@ pub(crate) const FIELD_SECONDS_NAME: &str = "seconds";
 pub(crate) const FIELD_NANOSECONDS_NAME: &str = "nanoseconds";
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "derive-debug"), derive(core::fmt::Debug))]
 pub struct Timestamp {
     seconds: i64,
     nanoseconds: u32,
+}
+
+impl core::fmt::Debug for Timestamp {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Timestamp")
+            .field("seconds", &self.seconds)
+            .field("nanoseconds", &self.nanoseconds)
+            .finish()
+    }
 }
 
 impl Timestamp {

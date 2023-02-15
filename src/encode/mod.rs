@@ -274,12 +274,18 @@ impl SerializeIntoSlice for () {
 }
 
 #[derive(PartialEq, Eq)]
-#[cfg_attr(any(test, feature = "derive-debug"), derive(core::fmt::Debug))]
 #[repr(transparent)]
 pub struct Binary<'a>(
     #[cfg(not(any(feature = "alloc", feature = "std")))] &'a [u8],
     #[cfg(any(feature = "alloc", feature = "std"))] Cow<'a, [u8]>,
 );
+
+impl<'a> core::fmt::Debug for Binary<'a> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_tuple("Binary").field(&self.0).finish()
+    }
+}
+
 impl<'a> Binary<'a> {
     #[cfg(not(any(feature = "alloc", feature = "std")))]
     #[inline]
