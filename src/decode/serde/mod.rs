@@ -224,6 +224,7 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
             Marker::FixArray(_) => self.deserialize_seq(visitor),
             Marker::Array16 => self.deserialize_seq(visitor),
             Marker::Array32 => self.deserialize_seq(visitor),
+            Marker::Str8 => self.deserialize_str(visitor),
             Marker::Str16 => self.deserialize_str(visitor),
             Marker::Str32 => self.deserialize_str(visitor),
             Marker::Bin8 => self.deserialize_bytes(visitor),
