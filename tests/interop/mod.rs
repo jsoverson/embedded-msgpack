@@ -1,5 +1,3 @@
-use serde_json;
-
 #[cfg(feature = "timestamp")]
 #[test]
 fn test_json_timestamp() {
@@ -24,7 +22,7 @@ fn test_json_ext_de() {
     use wasm_msgpack::Ext;
     let ext = Ext::new(10, &[b'a', b'b', b'c', b'd']);
     let j = "{\"type\":10,\"data\":\"abcd\"}";
-    assert_eq!(&ext, &serde_json::from_str::<Ext>(&j).unwrap());
+    assert_eq!(&ext, &serde_json::from_str::<Ext>(j).unwrap());
 }
 
 // This test needs at least `alloc`, because serde_json serializes byte arrays as sequences,

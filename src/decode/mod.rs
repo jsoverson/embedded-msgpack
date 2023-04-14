@@ -475,7 +475,9 @@ pub fn read_str(buf: &[u8]) -> Result<(&str, usize), Error> {
                 return Err(Error::EndOfBuffer(Marker::Str32));
             }
         }
-        _ => return Err(Error::InvalidStringType),
+        _ => {
+            return Err(Error::InvalidStringType);
+        }
     };
     let buf = &buf[header_len..header_len + len];
     let s = core::str::from_utf8(buf).map_err(Error::InvalidUtf8)?;

@@ -2,6 +2,9 @@
 use wasm_msgpack::encode::Binary;
 
 fn print_slice(data: &[u8]) {
+    if data.len() > 100 {
+        return;
+    }
     print!("[");
     for (i, v) in data.iter().enumerate() {
         print!("{}0x{:02x}", if i > 0 { ", " } else { "" }, v);

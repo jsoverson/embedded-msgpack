@@ -1,5 +1,13 @@
-fn test_decode<'a, T: serde::de::Deserialize<'a> + PartialEq + std::fmt::Debug>(expected: T, variants: &'a [&'a [u8]]) {
+fn test_decode<'a, T: serde::ser::Serialize + serde::de::Deserialize<'a> + PartialEq + std::fmt::Debug>(
+    expected: T,
+    variants: &'a [&'a [u8]],
+) {
+    let buff = &mut [0u8; 1024 * 100];
+    let len = wasm_msgpack::encode::serde::to_array(&expected, buff).unwrap();
+    let actual_bytes = &buff[0..len];
+    println!("actual_bytes: {:?}", actual_bytes);
     for &x in variants.iter() {
+        println!("from_bytes: {:?}", x);
         let v: T = wasm_msgpack::decode::from_slice(x).unwrap();
         assert_eq!(expected, v);
     }
@@ -77,42 +85,55 @@ fn decode_bin32() {
         ],
     );
 }
+use serde::{Deserialize, Serialize};
+use serde_repr::Deserialize_repr;
+#[allow(clippy::enum_variant_names)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug)]
+enum Test {
+    UnitVariant,
+    NewTypeVariant(i32),
+    TupleVariant(i32, u8),
+    StructVariant { a: i32, b: u8 },
+}
 
 #[test]
-fn decode_enum() {
-    use serde::Deserialize;
-    use serde_repr::Deserialize_repr;
-    #[allow(clippy::enum_variant_names)]
-    #[derive(Deserialize, PartialEq, Eq, Debug)]
-    enum Test {
-        UnitVariant,
-        NewTypeVariant(i32),
-        TupleVariant(i32, u8),
-        StructVariant { a: i32, b: u8 },
-    }
+fn decode_enum_unitvariant() {
     test_decode(
         Test::UnitVariant,
         &[&[0xAB, 0x55, 0x6E, 0x69, 0x74, 0x56, 0x61, 0x72, 0x69, 0x61, 0x6E, 0x74]],
     );
+}
+
+#[test]
+fn decode_enum_newtypevariant() {
     test_decode(
         Test::NewTypeVariant(1),
-        &[&[
-            0xAE, 0x4E, 0x65, 0x77, 0x54, 0x79, 0x70, 0x65, 0x56, 0x61, 0x72, 0x69, 0x61, 0x6E, 0x74, 0x91, 0x01,
-        ]],
+        &[&[129, 174, 78, 101, 119, 84, 121, 112, 101, 86, 97, 114, 105, 97, 110, 116, 1]],
     );
+}
+
+#[test]
+fn decode_enum_tuplevariant() {
     test_decode(
         Test::TupleVariant(1, 2),
         &[&[
             0xAC, 0x54, 0x75, 0x70, 0x6C, 0x65, 0x56, 0x61, 0x72, 0x69, 0x61, 0x6E, 0x74, 0x92, 0x01, 0x02,
         ]],
     );
+}
+
+#[test]
+fn decode_enum_structvariant() {
     test_decode(
         Test::StructVariant { a: 1, b: 2 },
-        &[&[
-            0xAD, 0x53, 0x74, 0x72, 0x75, 0x63, 0x74, 0x56, 0x61, 0x72, 0x69, 0x61, 0x6E, 0x74, 0x82, 0xA1, 0x61, 0x01, 0xA1, 0x62, 0x02,
-        ]],
+        &[
+            // old impl with serialized keys:
+            //   &[0xAD, 0x53, 0x74, 0x72, 0x75, 0x63, 0x74, 0x56, 0x61, 0x72, 0x69, 0x61, 0x6E, 0x74, 0x82, 0xA1, 0x61, 0x01, 0xA1, 0x62, 0x02]
+            // new impl serializing a tuple:
+            &[130, 173, 83, 116, 114, 117, 99, 116, 86, 97, 114, 105, 97, 110, 116, 146, 1, 2],
+        ],
     );
-    #[derive(Deserialize_repr, PartialEq, Eq, Debug)]
+    #[derive(Deserialize_repr, Serialize, PartialEq, Eq, Debug)]
     #[repr(u8)]
     enum Test2 {
         Variant1 = 1,

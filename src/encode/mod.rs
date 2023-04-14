@@ -304,7 +304,7 @@ impl<'a> Deref for Binary<'a> {
     #[cfg(not(any(feature = "alloc", feature = "std")))]
     #[inline]
     fn deref(&self) -> &Self::Target {
-        &self.0
+        self.0
     }
     #[cfg(any(feature = "alloc", feature = "std"))]
     #[inline]

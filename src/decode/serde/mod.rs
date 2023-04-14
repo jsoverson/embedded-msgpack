@@ -211,6 +211,15 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
 
     fn deserialize_identifier<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
         print_debug::<V>("Deserializer::deserialize_", "identifier", self);
+        let marker = self.peek().ok_or(Error::EndOfBuffer(Marker::Reserved))?;
+        #[allow(clippy::single_match)]
+        match marker {
+            Marker::FixMap(_) => {
+                let (_len, header_len) = crate::decode::read_map_len(&self.slice[self.index..])?;
+                self.index += header_len;
+            }
+            _ => {}
+        }
         self.deserialize_str(visitor)
     }
 

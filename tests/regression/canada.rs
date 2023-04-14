@@ -58,9 +58,9 @@ const OBJ_A: [u8; 375] = [
 
 // Found when trying to decode data from this benchmark : https://github.com/cloudflare/serde-wasm-bindgen/tree/master/benchmarks
 #[test]
+#[allow(clippy::excessive_precision)]
 fn serde_wasm_bench() {
     let actual: Canada = wasm_msgpack::decode::from_slice(&OBJ_A).unwrap();
-    println!("{:?}", actual);
     let expected = Canada {
         obj_type: ObjType::FeatureCollection,
         features: vec![Feature {

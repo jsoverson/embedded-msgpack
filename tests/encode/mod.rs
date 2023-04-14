@@ -25,13 +25,17 @@ fn test_encode_serde<T: serde::Serialize>(data: &T, expected: &[u8]) {
 }
 #[cfg(feature = "serde")]
 fn test_encode<T>(data: T, expected: &[u8])
-where T: SerializeIntoSlice + serde::Serialize {
+where
+    T: SerializeIntoSlice + serde::Serialize,
+{
     test_encode_direct(&data, expected);
     test_encode_serde(&data, expected);
 }
 #[cfg(not(feature = "serde"))]
 fn test_encode<T>(data: T, expected: &[u8])
-where T: SerializeIntoSlice {
+where
+    T: SerializeIntoSlice,
+{
     test_encode_direct(&data, expected);
 }
 

@@ -39,14 +39,7 @@ impl<'de, 'a> de::VariantAccess<'de> for UnitVariantAccess<'a, 'de> {
         T: de::DeserializeSeed<'de>,
     {
         print_debug::<T>("UnitVariantAccess::", "newtype_variant_seed", self.de);
-
-        let (len, header_len) = crate::decode::read_array_len(&self.de.slice[self.de.index..])?;
-        self.de.index += header_len;
-        match len {
-            1 => seed.deserialize(self.de),
-            0 => Err(Error::InvalidNewTypeLength),
-            _ => Err(Error::InvalidNewTypeLength),
-        }
+        seed.deserialize(self.de)
     }
 
     fn tuple_variant<V>(self, v_len: usize, visitor: V) -> Result<V::Value, Self::Error>
@@ -67,11 +60,12 @@ impl<'de, 'a> de::VariantAccess<'de> for UnitVariantAccess<'a, 'de> {
         V: de::Visitor<'de>,
     {
         print_debug::<V>("UnitVariantAccess::", "struct_variant", self.de);
-        let (len, header_len) = crate::decode::read_map_len(&self.de.slice[self.de.index..])?;
+        let (len, header_len) = crate::decode::read_array_len(&self.de.slice[self.de.index..])?;
         self.de.index += header_len;
         if len != fields.len() {
             return Err(Error::OutOfBounds);
         }
-        visitor.visit_map(super::MapAccess::new(&mut *self.de, fields.len()))
+        visitor.visit_seq(super::SeqAccess::new(&mut *self.de, len))
+        // visitor.visit_map(super::MapAccess::new(&mut *self.de, fields.len()))
     }
 }

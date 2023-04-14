@@ -1,4 +1,4 @@
-use serde::ser;
+use serde::ser::{self};
 
 // use heapless::{consts::*, String, Vec};
 
@@ -56,7 +56,7 @@ impl<'a, 'b> ser::Serializer for &'a mut Serializer<'b> {
     type SerializeTupleVariant = &'a mut Serializer<'b>;
     type SerializeMap = SerializeMap<'a, 'b>;
     type SerializeStruct = SerializeStruct<'a, 'b>;
-    type SerializeStructVariant = Unreachable;
+    type SerializeStructVariant = &'a mut Serializer<'b>;
 
     fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
         self.append(v)
@@ -172,13 +172,15 @@ impl<'a, 'b> ser::Serializer for &'a mut Serializer<'b> {
         self,
         _name: &'static str,
         _variant_index: u32,
-        _variant: &'static str,
-        _value: &T,
+        variant: &'static str,
+        value: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
         T: ser::Serialize,
     {
-        unimplemented!()
+        let mut seq = self.serialize_map(Some(1))?;
+        serde::ser::SerializeMap::serialize_key(&mut seq, variant)?;
+        serde::ser::SerializeMap::serialize_value(&mut seq, value)
     }
 
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
@@ -201,7 +203,7 @@ impl<'a, 'b> ser::Serializer for &'a mut Serializer<'b> {
         _variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
-        unimplemented!()
+        Ok(self)
     }
 
     fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
@@ -232,10 +234,13 @@ impl<'a, 'b> ser::Serializer for &'a mut Serializer<'b> {
         self,
         _name: &'static str,
         _variant_index: u32,
-        _variant: &'static str,
-        _len: usize,
+        variant: &'static str,
+        len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
-        unimplemented!()
+        self.pos += super::serialize_map_start(len, &mut self.buf[self.pos..])?;
+        self.serialize_str(variant)?;
+        self.pos += super::serialize_array_start(len, &mut self.buf[self.pos..])?;
+        Ok(self)
     }
 
     fn collect_str<T: ?Sized>(self, _value: &T) -> Result<Self::Ok, Self::Error>
@@ -281,6 +286,29 @@ impl<'a, 'b> ::serde::ser::SerializeTupleVariant for &'a mut Serializer<'b> {
     fn end(self) -> Result<(), Error> {
         self.state = State::Normal;
         Ok(())
+    }
+}
+
+impl<'a, 'b> ::serde::ser::SerializeStructVariant for &'a mut Serializer<'b> {
+    type Ok = ();
+    type Error = Error;
+
+    fn end(self) -> Result<(), Error> {
+        self.state = State::Normal;
+        Ok(())
+    }
+
+    fn skip_field(&mut self, key: &'static str) -> Result<(), Self::Error> {
+        let _ = key;
+        Ok(())
+    }
+
+    fn serialize_field<T: ?Sized>(&mut self, _key: &'static str, value: &T) -> Result<(), Self::Error>
+    where
+        T: serde::Serialize,
+    {
+        // key.serialize(&mut **self)?;
+        value.serialize(&mut **self)
     }
 }
 

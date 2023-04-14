@@ -131,7 +131,7 @@ pub(crate) fn read_ext_len<B: zerocopy::ByteSlice>(buf: B) -> Result<(usize, usi
     }
 }
 
-pub fn serialize_ext<'a>(value: &Ext<'a>, buf: &mut [u8]) -> Result<usize, Error> {
+pub fn serialize_ext(value: &Ext<'_>, buf: &mut [u8]) -> Result<usize, Error> {
     let typ = value.get_type();
     let data = value.get_data();
 
