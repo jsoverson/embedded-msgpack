@@ -243,11 +243,12 @@ impl<'a, 'b> ser::Serializer for &'a mut Serializer<'b> {
         Ok(self)
     }
 
+    #[cfg(not(any(feature = "std", feature = "alloc")))]
     fn collect_str<T: ?Sized>(self, _value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: core::fmt::Display,
     {
-        unimplemented!()
+        unreachable!()
     }
 }
 

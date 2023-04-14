@@ -50,7 +50,8 @@ wasm = [
   "ext32",
   "serde",
   "serde_bytes",
-  "compliant"
+  "compliant",
+  "alloc"
 ]
 std = [
   "byteorder/std",
