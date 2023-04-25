@@ -37,6 +37,13 @@ fn enum_newtype_u32() {
 }
 
 #[test]
+fn json_null() {
+    let bytes = r#"{"nullval":null}"#;
+    let json: serde_json::Value = serde_json::from_str(bytes).unwrap();
+    assert_same(&json);
+}
+
+#[test]
 // #[ignore = "TODO"]
 fn enum_structtype() {
     let expected = TestEnum::StructType {

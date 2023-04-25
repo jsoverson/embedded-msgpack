@@ -268,8 +268,12 @@ where
 }
 impl SerializeIntoSlice for () {
     #[inline(always)]
-    fn write_into_slice(&self, _buf: &mut [u8]) -> Result<usize, Error> {
-        Ok(0)
+    fn write_into_slice(&self, buf: &mut [u8]) -> Result<usize, Error> {
+        if buf.is_empty() {
+            return Err(Error::EndOfBuffer);
+        }
+        buf[0] = Marker::Null.to_u8();
+        Ok(1)
     }
 }
 
