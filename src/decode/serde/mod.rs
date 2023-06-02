@@ -364,7 +364,7 @@ impl de::Error for Error {
             use core::fmt::Write;
 
             let mut string = heapless::String::new();
-            write!(string, "{:.64}", msg).unwrap();
+            write!(string, "{:.512}", msg).unwrap();
             Error::CustomErrorWithMessage(string)
         }
         #[cfg(all(feature = "std", feature = "custom-error-messages"))]
